@@ -1,1 +1,351 @@
-तुम मुझे एक ऐसा ऐप बना के दो जिसमें मैं कोई भी क्यूआर कोड स्कैन करूँ, उसके बदले पर तुम मुझे एक नया क्यूआर कोड बना के देना और डिटेल सेम होनी चाहिए
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Smart Scanner</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #101827;
+    color: white;
+    text-align: center;
+}
+
+header {
+    padding: 20px;
+    background: #17243a;
+}
+
+header h2 {
+    margin: 0;
+    color: #39d5ff;
+}
+
+header p {
+    color: #b7c6d9;
+    font-size: 13px;
+}
+
+.container {
+    width: 92%;
+    max-width: 420px;
+    margin: 25px auto;
+}
+
+.scanner-box {
+    background: #1c2b42;
+    padding: 15px;
+    border-radius: 18px;
+}
+
+#reader {
+    width: 100%;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #080d16;
+}
+
+button {
+    border: none;
+    padding: 13px 20px;
+    margin: 8px 4px;
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    background: #16c7ef;
+    color: #07111c;
+}
+
+button:disabled {
+    opacity: .5;
+}
+
+.stop {
+    background: #ff5353;
+    color: white;
+}
+
+.status {
+    color: #8eeaff;
+    font-size: 14px;
+    margin-top: 15px;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.85);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+    padding: 15px;
+}
+
+.card {
+    background: white;
+    color: #17243a;
+    width: 100%;
+    max-width: 340px;
+    padding: 20px;
+    border-radius: 20px;
+    position: relative;
+}
+
+.close {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    background: #ff5252;
+    color: white;
+    border-radius: 50%;
+    padding: 8px 12px;
+}
+
+.brand {
+    color: #078db6;
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+#qrOutput {
+    width: 220px;
+    height: 220px;
+    margin: auto;
+}
+
+#qrOutput img,
+#qrOutput canvas {
+    max-width: 100%;
+}
+
+.content {
+    background: #eef5fa;
+    padding: 10px;
+    margin-top: 15px;
+    border-radius: 8px;
+    font-size: 12px;
+    word-break: break-all;
+    max-height: 100px;
+    overflow-y: auto;
+    text-align: left;
+}
+
+.footer {
+    font-size: 11px;
+    color: #8c9bad;
+    margin-top: 18px;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h2>QR SMART SCANNER</h2>
+    <p>Scan • Generate • Download</p>
+</header>
+
+<div class="container">
+
+    <div class="scanner-box">
+        <h3>Scan Physical QR Code</h3>
+
+        <div id="reader"></div>
+
+        <button id="startBtn" onclick="startScanner()">
+            Start Scanner
+        </button>
+
+        <button class="stop" onclick="stopScanner()">
+            Stop Camera
+        </button>
+
+        <div class="status" id="status">
+            Camera is not running
+        </div>
+    </div>
+
+    <div class="footer">
+        Keep scanning multiple QR codes without restarting.
+    </div>
+
+</div>
+
+<!-- QR POPUP -->
+
+<div class="modal" id="qrModal">
+    <div class="card">
+
+        <button class="close" onclick="closePopup()">✕</button>
+
+        <div class="brand">QR SMART</div>
+
+        <h3>New Branded QR Code</h3>
+
+        <div id="qrOutput"></div>
+
+        <div class="content" id="qrContent"></div>
+
+        <button onclick="copyContent()">Copy Data</button>
+
+        <button onclick="downloadQR()">Download QR</button>
+
+    </div>
+</div>
+
+<!-- Libraries -->
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<script>
+
+let scanner = null;
+let isRunning = false;
+let lastText = "";
+let processing = false;
+
+async function startScanner() {
+
+    if (isRunning) return;
+
+    scanner = new Html5Qrcode("reader");
+
+    try {
+
+        await scanner.start(
+            { facingMode: "environment" },
+            {
+                fps: 12,
+                qrbox: { width: 240, height: 240 },
+                aspectRatio: 1
+            },
+
+            onScanSuccess,
+
+            () => {}
+
+        );
+
+        isRunning = true;
+
+        document.getElementById("status").innerText =
+            "Camera running - Scan any QR code";
+
+        document.getElementById("startBtn").disabled = true;
+
+    } catch (error) {
+
+        document.getElementById("status").innerText =
+            "Camera error: " + error;
+
+    }
+}
+
+function onScanSuccess(decodedText) {
+
+    if (processing) return;
+
+    processing = true;
+    lastText = decodedText;
+
+    generateQR(decodedText);
+
+    document.getElementById("status").innerText =
+        "QR successfully scanned!";
+
+    setTimeout(() => {
+        processing = false;
+    }, 1500);
+}
+
+function generateQR(text) {
+
+    const output = document.getElementById("qrOutput");
+
+    output.innerHTML = "";
+
+    new QRCode(output, {
+        text: text,
+        width: 220,
+        height: 220,
+        colorDark: "#073b5c",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+    });
+
+    document.getElementById("qrContent").innerText = text;
+
+    document.getElementById("qrModal").style.display = "flex";
+}
+
+function closePopup() {
+
+    document.getElementById("qrModal").style.display = "none";
+
+    // Camera continues running
+}
+
+async function stopScanner() {
+
+    if (scanner && isRunning) {
+
+        try {
+            await scanner.stop();
+            await scanner.clear();
+
+            isRunning = false;
+
+            document.getElementById("startBtn").disabled = false;
+
+            document.getElementById("status").innerText =
+                "Camera stopped";
+
+        } catch (error) {
+            console.log(error);
+        }
+    }
+}
+
+function copyContent() {
+
+    navigator.clipboard.writeText(lastText)
+        .then(() => alert("QR data copied!"))
+        .catch(() => alert("Unable to copy data"));
+}
+
+function downloadQR() {
+
+    const output = document.getElementById("qrOutput");
+
+    const canvas = output.querySelector("canvas");
+    const img = output.querySelector("img");
+
+    let link = document.createElement("a");
+
+    if (canvas) {
+        link.href = canvas.toDataURL("image/png");
+    } else if (img) {
+        link.href = img.src;
+    } else {
+        alert("QR not ready");
+        return;
+    }
+
+    link.download = "QR-Smart-Generated.png";
+    link.click();
+}
+
+</script>
+
+</body>
+</html>
